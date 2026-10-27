@@ -1,0 +1,1 @@
+export default function Section({title,subtitle,children}){return <section className="max-w-7xl mx-auto px-4 sm:px-6 py-14"><h2 className="text-3xl sm:text-4xl font-black text-brand-navy">{title}</h2>{subtitle&&<p className="mt-2 text-slate-600 max-w-2xl">{subtitle}</p>}<div className="mt-8">{children}</div></section>}

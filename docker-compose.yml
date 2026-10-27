@@ -1,0 +1,88 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ministerio_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ministerio}
+      POSTGRES_USER: ${POSTGRES_USER:-ministerio}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-CambiaEstaClavePostgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ministerio} -d ${POSTGRES_DB:-ministerio}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - mrv
+
+  backend:
+    build: ./backend
+    container_name: ministerio_backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3000
+      DATABASE_URL: ${DATABASE_URL:-postgresql://ministerio:CambiaEstaClavePostgres@postgres:5432/ministerio}
+      JWT_SECRET: ${JWT_SECRET:-CambiaEstaClaveJWT_Larga_Y_Aleatoria_2026}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@ministerio.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-CambiaEstaClaveAdmin123!}
+      ADMIN_NAME: ${ADMIN_NAME:-Administrador Principal}
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+      UPLOAD_DIR: /app/uploads
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-250}
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+    networks:
+      - mrv
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: "${VITE_API_URL:-/api}"
+    container_name: ministerio_frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - mrv
+
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: ministerio_cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate  --url http://frontend:80
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    depends_on:
+      frontend:
+        condition: service_started
+    networks:
+      - mrv    
+
+volumes:
+  postgres_data:
+  uploads_data:
+
+networks:
+  mrv:
+    driver: bridge
