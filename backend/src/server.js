@@ -10,6 +10,7 @@ const jwt=require("jsonwebtoken");
 const pool=require("./config/db");
 const {auth,role}=require("./middleware/auth");
 const upload=require("./middleware/upload");
+const {uploadFile}=require("./services/cloudinary");
 
 const app=express();
 const port=Number(process.env.PORT||3000);
@@ -32,6 +33,23 @@ const tables={
 };
 const valid=t=>Object.hasOwn(tables,t);
 const asyncHandler=fn=>(req,res,next)=>Promise.resolve(fn(req,res,next)).catch(next);
+
+async function storeUploadedFile(file){
+  if(!file) return null;
+
+  try{
+    const result=await uploadFile(file.path,file.originalname);
+    return result.secure_url;
+  }finally{
+    try{
+      if(file.path && fs.existsSync(file.path)){
+        fs.unlinkSync(file.path);
+      }
+    }catch(error){
+      console.error("[UPLOAD CLEANUP]",error.message);
+    }
+  }
+}
 
 const DEFAULT_SETTINGS={
   site_name:"Ministerio Redención y Vida",
@@ -162,7 +180,7 @@ async function create(req,res){
   const d={...req.body};
   if(req.file){
     const uploadField=t==="songs"?"audio_url":t==="videos"?"video_url":"image_url";
-    d[uploadField]="/uploads/"+req.file.filename;
+    d[uploadField]=await storeUploadedFile(req.file);
   }
   const fields=tables[t].filter(k=>d[k]!==undefined);
   if(t==="songs"&&!d.audio_url)return res.status(400).json({message:"Carga un archivo de audio o indica audio_url"});
@@ -194,8 +212,9 @@ async function update(req,res){
 
   if(req.file){
     const k=t==="songs"?"audio_url":t==="videos"?"video_url":"image_url";
+    const publicUrl=await storeUploadedFile(req.file);
     fields.push(`${k}=$${values.length+1}`);
-    values.push("/uploads/"+req.file.filename);
+    values.push(publicUrl);
   }
 
   if(!fields.length)return res.status(400).json({message:"Selecciona un archivo o realiza algún cambio."});

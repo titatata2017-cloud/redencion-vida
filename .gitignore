@@ -14,3 +14,11 @@ Thumbs.db
 
 .vscode/
 .idea/
+# Respaldos privados de PostgreSQL
+respaldo-ministerio-*.sql
+
+# Respaldos privados y archivos temporales
+respaldo-render.sql
+ssssaa
+*.bak
+*.cloudinary-backup
